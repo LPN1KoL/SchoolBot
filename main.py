@@ -2,7 +2,6 @@ from datetime import datetime, timedelta
 from pprint import pprint
 from pydnevnikruapi.dnevnik import dnevnik
 import pymysql
-import time
 import telebot
 import threading
 import requests
