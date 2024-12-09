@@ -13,9 +13,10 @@ from platform import system
 from pyvirtualdisplay import Display
 from selenium.webdriver.chrome.options import Options
 
-token = 'token'
+token = '8073803344:AAH52GBbQPrIJzAo4W8fIWffK9MBv7m4j94'
 con = pymysql.connect(host='localhost', user='schoolnik', password='2987Kok_', database='school_bot')
 cur = con.cursor()
+cur.execute('create table IF NOT EXISTS users(id int primary key NOT NULL AUTO_INCREMENT, login varchar(100), password varchar(30), chat_id bigint, dn_id bigint, raspisanie varchar(100));')
 keys = {}
 
 bot = telebot.TeleBot(token=token)
@@ -23,48 +24,61 @@ bot = telebot.TeleBot(token=token)
 
 
 def check(chat_id):
-    cur.execute('SELECT chat_id, login, password, id FROM users;')
-    a = True
-    for user in cur.fetchall():
-        if user[0] == chat_id:
-            a = False
-            return True
-    if a:
-        bot.send_message(chat_id, "Для регистрации напишите\n\n /login ваш логин ваш пароль")
+    cur.execute(f'SELECT id FROM users WHERE chat_id = {chat_id};')
+    user = cur.fetchall()
+    if user:
+        return True
+    else:
+
         return False
 
 
+def rep_kav(text):
+    if text:
+        k = "\""
+        s = "\'"
+        return text.replace(k, '').replace(s, '')
+    else:
+        return ''
+
+
 def get_markup(chat_id):
-    cur.execute('SELECT chat_id, raspisanie FROM users;')
-    a = True
-    for user in cur.fetchall():
-        if user[0] == chat_id:
-            a = False
-            if user[1]:
-                markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=1)
-                button1 = telebot.types.KeyboardButton(text="Расписание")
-                button2 = telebot.types.KeyboardButton(text="Дз на завтра")
-                button3 = telebot.types.KeyboardButton(text="Мои оценки")
-                markup.add(button1).row(button2, button3)
-                return markup
-            else:
-                markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=1)
-                button2 = telebot.types.KeyboardButton(text="Дз на завтра")
-                button3 = telebot.types.KeyboardButton(text="Мои оценки")
-                markup.row(button2, button3)
-                return markup
-    if a:
-        markup = telebot.types.ReplyKeyboardRemove()
-        return markup
+    cur.execute(f'SELECT raspisanie FROM users WHERE chat_id = {chat_id};')
+    user = cur.fetchall()
+    if user:
+        if user[0][0]:
+            markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=1)
+            button1 = telebot.types.KeyboardButton(text="Расписание")
+            button2 = telebot.types.KeyboardButton(text="Дз на завтра")
+            button3 = telebot.types.KeyboardButton(text="Мои оценки")
+            markup.add(button1).row(button2, button3)
+            return markup
+        else:
+            markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=1)
+            button2 = telebot.types.KeyboardButton(text="Дз на завтра")
+            button3 = telebot.types.KeyboardButton(text="Мои оценки")
+            markup.row(button2, button3)
+            return markup
+    else:
+        markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=1)
+        button1 = telebot.types.KeyboardButton(text="Вход в дневник.ру")
+        return markup.add(button1)
 
 
 def search(chat_id, school_id, user_id, dn):
-
+    t2 = 0
     works = dn.get_work_types(school_id)
     while keys[str(chat_id)]:
-        old_marks = dn.get_person_marks(user_id, school_id, start_time=datetime.now() - timedelta(weeks=3))
+        t1 = datetime.now()
+        if t2:
+            t = datetime.now() - t2
+            old_marks = dn.get_person_marks(user_id, school_id, start_time=datetime.now() - timedelta(weeks=4) - t)
+        else:
+            t = timedelta(seconds=0)
+            old_marks = dn.get_person_marks(user_id, school_id, start_time=datetime.now() - timedelta(weeks=4))
         time.sleep(60)
-        marks = dn.get_person_marks(user_id, school_id, start_time=datetime.now() - timedelta(weeks=3) - timedelta(seconds=60))
+        t2 = datetime.now()
+        marks = dn.get_person_marks(user_id, school_id, start_time=datetime.now() - timedelta(weeks=4) - timedelta(seconds=120) - (datetime.now() - t1 - t))
         if len(marks) > len(old_marks):
             for mark in marks:
                 if not (mark in old_marks):
@@ -79,10 +93,11 @@ def search(chat_id, school_id, user_id, dn):
                         if mark['workType'] == work['id']:
                             work_type = work['title']
                             break
-                    mes = f'Вам поставили *{mark["textValue"]}* по предмету *{dn.get_lesson_info(mark["lesson"])["subject"]["name"]}*!\n\n_Дата:_  *{date.replace("-", ".")}*\n\n_Тип:_  *{work_type}*'
-                    old_marks = marks
+                    f'Вам поставили *{mark["textValue"]}* по предмету *{dn.get_lesson_info(mark["lesson"])["subject"]["name"]}*!\n\n_Дата:_  *{date.replace("-", ".")}*\n\n_Тип:_  *{work_type}*'
 
-                    bot.send_message(chat_id, mes, reply_markup=get_markup(chat_id), parse_mode='Markdown')
+
+                    bot.send_message(chat_id, f'Вам поставили *{mark["textValue"]}* по предмету *{dn.get_lesson_info(mark["lesson"])["subject"]["name"]}*!\n\n_Дата:_  *{date.replace("-", ".")}*\n\n_Тип:_  *{work_type}*', reply_markup=get_markup(chat_id), parse_mode='Markdown')
+
 
 
 
@@ -123,39 +138,50 @@ def close_search(message):
                 bot.send_message(message.chat.id, "Поиск остановлен!", reply_markup=get_markup(message.chat.id))
 
 
-@bot.message_handler(commands=['login'])
-def login(message):
-    cur.execute('SELECT chat_id, login, password, id FROM users;')
-    a = True
-    for user in cur.fetchall():
-        if user[0] == message.chat.id:
-            a = False
-            bot.send_message(message.chat.id, "Вы уже зарегестрированы! Если хотите выйти /logout")
-    if a:
-
-        mes = message.text.replace('/login ', '', 1)
-        probel = 0
-        for i in range(0, len(mes)):
-            if mes[i] == ' ':
-                probel = i
-        if probel:
-            login = ''
-            for i in range(0, probel):
-                login += mes[i]
-            password = ''
-            for i in range(probel + 1, len(mes)):
-                password += mes[i]
-
+def get_password(message, login):
+    if message.text:
+        if message.text != 'Отмена🔙':
             try:
+                login = rep_kav(login)
+                password = rep_kav(message.text)
                 dn = dnevnik.DiaryAPI(login=login, password=password)
                 cur.execute(f'INSERT INTO users (login, password, chat_id, dn_id) VALUES ("{login}", "{password}", {message.chat.id}, {dn.get_context()["personId"]});')
                 con.commit()
                 bot.send_message(message.chat.id, f'Вы успешно зарегестрировались как {dn.get_context()["shortName"]}', reply_markup=get_markup(message.chat.id))
             except:
-                bot.send_message(message.chat.id, 'Логин и пароль не подходят!')
-
+                bot.send_message(message.chat.id, 'Логин и пароль не подходят!', reply_markup=get_markup(message.chat.id))
         else:
-            bot.send_message(message.chat.id, "Данные не корректны! Для регистрации напишите\n\n/login ваш логин ваш пароль\n\nПример: nikolay 2764Loke")
+            bot.send_message(message.chat.id, 'Вход отменен', reply_markup=get_markup(message.chat.id))
+    else:
+        bot.send_message(message.chat.id, 'Вход отменен', reply_markup=get_markup(message.chat.id))
+
+
+def get_login(message):
+    if message.text:
+        if message.text != 'Отмена🔙':
+            markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=1)
+            markup.add(telebot.types.KeyboardButton("Отмена🔙"))
+            bot.send_message(message.chat.id, 'Введите ваш пароль от дневника.ру', reply_markup=markup)
+            bot.register_next_step_handler(message, get_password, login=message.text)
+        else:
+            bot.send_message(message.chat.id, 'Вход отменен', reply_markup=get_markup(message.chat.id))
+    else:
+        bot.send_message(message.chat.id, 'Вход отменен', reply_markup=get_markup(message.chat.id))
+
+
+@bot.message_handler(commands=['login'])
+def login(message):
+    cur.execute(f'SELECT id FROM users WHERE chat_id = {message.chat.id};')
+    user = cur.fetchall()
+    if user:
+        bot.send_message(message.chat.id, "Вы уже зарегестрированы! Если хотите выйти /logout")
+    else:
+        markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=1)
+        markup.add(telebot.types.KeyboardButton("Отмена🔙"))
+        bot.send_message(message.chat.id, 'Введите ваш логин от дневника.ру', reply_markup=markup)
+        bot.register_next_step_handler(message, get_login)
+
+
 
 
 
@@ -167,17 +193,32 @@ def logout(message):
         bot.send_message(message.chat.id, "Вы успешно вышли!", reply_markup=get_markup(message.chat.id))
 
 
+def add_rasp(message):
+    if message.text:
+        if message.text == 'Отмена🔙':
+            bot.send_message(message.chat.id, 'Добавление отменено', reply_markup=get_markup(message.chat.id))
+        else:
+
+            cur.execute(f'UPDATE users SET raspisanie = "{rep_kav(message.text)}" WHERE chat_id = {message.chat.id}')
+            bot.send_message(message.chat.id, 'Расписание добавлено', reply_markup=get_markup(message.chat.id))
+    else:
+        bot.send_message(message.chat.id, 'Добавление отменено', reply_markup=get_markup(message.chat.id))
+
+
 @bot.message_handler(commands=['raspisanie'])
 def raspisanie(message):
     if check(message.chat.id):
-        mes = message.text
-        if mes != '/raspisanie':
-            mes = mes.replace('/raspisanie ', '', 1)
-            cur.execute(f'UPDATE users SET raspisanie="{mes}" WHERE chat_id={message.chat.id};')
-            con.commit()
-            bot.send_message(message.chat.id, "Вы упешно добавили расписание!!", reply_markup=get_markup(message.chat.id))
+        cur.execute(f'SELECT raspisanie FROM users WHERE chat_id={message.chat.id};')
+        user = cur.fetchall()[0]
+
+        if user[0]:
+            url = user[0]
+            bot.send_message(message.chat.id, f"Расписание на завтра:\n{url}\n\nСсылка на Дневник.ру\nhttps://dnevnik.ru/userfeed", reply_markup=get_markup(message.chat.id))
         else:
-            bot.send_message(message.chat.id, "Данные не корректны! Для добавления напишите\n\n/raspisanie ваша ссылка")
+            markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=1)
+            markup.add(telebot.types.KeyboardButton("Отмена🔙"))
+            bot.send_message(message.chat.id, "Для добавления расписания отправьте ссылку", reply_markup=markup)
+            bot.register_next_step_handler(message, add_rasp)
 
 
 def send_files(dn, chat_id):
@@ -202,90 +243,94 @@ def send_files(dn, chat_id):
 
 @bot.message_handler()
 def answer(message):
-    if check(message.chat.id):
-        if message.text == 'Расписание':
-            cur.execute(f'SELECT raspisanie FROM users WHERE chat_id={message.chat.id};')
-            user = cur.fetchall()[0]
+    if message.text == 'Вход в дневник.ру':
+        login(message)
+    else:
+        if check(message.chat.id):
+            if message.text == 'Расписание':
+                cur.execute(f'SELECT raspisanie FROM users WHERE chat_id={message.chat.id};')
+                user = cur.fetchall()[0]
 
-            if user[0]:
-                url = user[0]
-                bot.send_message(message.chat.id, f"Расписание на завтра:\n{url}\n\nСсылка на Дневник.ру\nhttps://dnevnik.ru/userfeed", reply_markup=get_markup(message.chat.id))
-        elif message.text == 'Дз на завтра':
+                if user[0]:
+                    url = user[0]
+                    bot.send_message(message.chat.id, f"Расписание на завтра:\n{url}\n\nСсылка на Дневник.ру\nhttps://dnevnik.ru/userfeed", reply_markup=get_markup(message.chat.id))
+            elif message.text == 'Дз на завтра':
 
-            cur.execute('SELECT chat_id, login, password, dn_id FROM users;')
-            for user in cur.fetchall():
-                if user[0] == message.chat.id:
-                    dn = dnevnik.DiaryAPI(login=user[1], password=user[2])
-                    lessons_list = []
-                    groups = []
-                    for group in dn.get_person_groups_all(user[3]):
-                        groups.append(group['id'])
+                cur.execute('SELECT chat_id, login, password, dn_id FROM users;')
+                for user in cur.fetchall():
+                    if user[0] == message.chat.id:
+                        dn = dnevnik.DiaryAPI(login=user[1], password=user[2])
+                        lessons_list = []
+                        groups = []
+                        for group in dn.get_person_groups_all(user[3]):
+                            groups.append(group['id'])
 
 
-                    for lesson in dn.get_group_lessons_info(dn.get_context()['groupIds'][0], datetime.now() + timedelta(days=1), datetime.now() + timedelta(days=1) + timedelta(seconds=2)):
-                        if lesson['group'] in groups:
-                            homework = ''
-                            for work in lesson['works']:
-                                homework += work['text'].replace('\n', '').replace('\t', '') + ' '
-                            lessons_list.append({'number': lesson['number'], 'name': lesson['subject']['name'], 'id': lesson['id'], 'homework': homework})
+                        for lesson in dn.get_group_lessons_info(dn.get_context()['groupIds'][0], datetime.now() + timedelta(days=1), datetime.now() + timedelta(days=1) + timedelta(seconds=2)):
+                            if lesson['group'] in groups:
+                                homework = ''
+                                for work in lesson['works']:
+                                    if work['text']:
+                                        homework += work['text'].replace('\n', '').replace('\t', '') + ' '
+                                lessons_list.append({'number': lesson['number'], 'name': lesson['subject']['name'], 'id': lesson['id'], 'homework': homework})
 
-                    message_s = "Дз на завтра:"
-                    for lesson in lessons_list:
-                        message_s += '\n\n' + '*' + lesson['name'] + ':*' + '  ' + '_' + lesson['homework'] + '_'
-                    bot.send_message(message.chat.id, message_s, reply_markup=get_markup(message.chat.id), parse_mode="Markdown")
-                    send_files(dn, message.chat.id)
-        elif message.text == 'Мои оценки':
-            msg = bot.send_message(message.chat.id, 'Подождите...')
-            cur.execute(f'SELECT login, password FROM users WHERE chat_id={message.chat.id};')
-            user = cur.fetchall()[0]
-            dn = dnevnik.DiaryAPI(login=user[0], password=user[1])
-            us = dn.get_context()
-            if system() == 'Windows':
-                options = Options()
-                options.add_argument("--headless=new")
-                driver = webdriver.Chrome(options=options)
-                driver.set_window_size('2500', '3000')
-                driver.get("https://login.dnevnik.ru/login")
-                input_field = driver.find_element(By.CLASS_NAME, "login__body__input_login")
-                input_field.send_keys(user[0])
-                input_field = driver.find_element(By.ID, "password-field")
-                input_field.send_keys(user[1])
-                button = driver.find_element(By.CLASS_NAME, "login__submit")
-                button.click()
-                driver.get(f'https://dnevnik.ru/marks/school/{us["schoolIds"][0]}/student/{us["personId"]}/period')
-                time.sleep(1)
-                driver.execute_script("arguments[0].scrollIntoView(true);", driver.find_element(By.CLASS_NAME, 'Tamh1'))
-                time.sleep(1)
-                driver.find_element(By.CLASS_NAME, 'Tamh1').screenshot("screenshot.png")
-                driver.close()
-                driver.quit()
-            elif system() == "Linux":
-                display = Display(visible=False, size=(1600, 1000))
-                display.start()
-                driver = webdriver.Chrome()
-                driver.set_window_size('2500', '3000')
-                driver.get("https://login.dnevnik.ru/login")
-                input_field = driver.find_element(By.CLASS_NAME, "login__body__input_login")
-                input_field.send_keys("shufliknikolai")
-                input_field = driver.find_element(By.ID, "password-field")
-                input_field.send_keys("2987Kok_")
-                button = driver.find_element(By.CLASS_NAME, "login__submit")
-                button.click()
-                driver.get('https://dnevnik.ru/marks/school/1000016844863/student/1000024464183/period')
-                time.sleep(1)
-                driver.execute_script("arguments[0].scrollIntoView(true);", driver.find_element(By.CLASS_NAME, 'Tamh1'))
-                time.sleep(1)
-                driver.find_element(By.CLASS_NAME, 'Tamh1').screenshot("screenshot.png")
-                driver.close()
-                driver.quit()
-                display.stop()
-            path = os.getcwd()
-            if os.path.exists(path + '/screenshot.png'):
-                bot.send_photo(message.chat.id, open(path + '/screenshot.png', 'rb'), reply_markup=get_markup(message.chat.id))
-                bot.delete_message(message.chat.id, msg.message_id)
-                os.remove(path + '/screenshot.png')
-            else:
-                bot.send_message(message.chat.id, 'Что-то пошло не так!', reply_markup=get_markup(message.chat.id))
+                        message_s = "Дз на завтра:"
+                        for lesson in lessons_list:
+                            message_s += '\n\n' + '*' + lesson['name'] + ':*' + '  ' + '_' + lesson['homework'] + '_'
+                        bot.send_message(message.chat.id, message_s, reply_markup=get_markup(message.chat.id), parse_mode="Markdown")
+                        send_files(dn, message.chat.id)
+            elif message.text == 'Мои оценки':
+                msg = bot.send_message(message.chat.id, 'Подождите...')
+                cur.execute(f'SELECT login, password FROM users WHERE chat_id={message.chat.id};')
+                user = cur.fetchall()[0]
+                dn = dnevnik.DiaryAPI(login=user[0], password=user[1])
+                us = dn.get_context()
+                if system() == 'Windows':
+                    options = Options()
+                    options.add_argument("--headless=new")
+                    driver = webdriver.Chrome(options=options)
+                    driver.set_window_size('2500', '3000')
+                    driver.get("https://login.dnevnik.ru/login")
+                    input_field = driver.find_element(By.CLASS_NAME, "login__body__input_login")
+                    input_field.send_keys(user[0])
+                    input_field = driver.find_element(By.ID, "password-field")
+                    input_field.send_keys(user[1])
+                    button = driver.find_element(By.CLASS_NAME, "login__submit")
+                    button.click()
+                    driver.get(f'https://dnevnik.ru/marks/school/{us["schoolIds"][0]}/student/{us["personId"]}/period')
+                    time.sleep(1)
+                    driver.execute_script("arguments[0].scrollIntoView(true);", driver.find_element(By.CLASS_NAME, 'Tamh1'))
+                    time.sleep(1)
+                    driver.find_element(By.CLASS_NAME, 'Tamh1').screenshot("screenshot.png")
+                    driver.close()
+                    driver.quit()
+                elif system() == "Linux":
+                    display = Display(visible=False, size=(1600, 1000))
+                    display.start()
+                    driver = webdriver.Chrome()
+                    driver.set_window_size('2500', '3000')
+                    driver.get("https://login.dnevnik.ru/login")
+                    input_field = driver.find_element(By.CLASS_NAME, "login__body__input_login")
+                    input_field.send_keys("shufliknikolai")
+                    input_field = driver.find_element(By.ID, "password-field")
+                    input_field.send_keys("2987Kok_")
+                    button = driver.find_element(By.CLASS_NAME, "login__submit")
+                    button.click()
+                    driver.get('https://dnevnik.ru/marks/school/1000016844863/student/1000024464183/period')
+                    time.sleep(1)
+                    driver.execute_script("arguments[0].scrollIntoView(true);", driver.find_element(By.CLASS_NAME, 'Tamh1'))
+                    time.sleep(1)
+                    driver.find_element(By.CLASS_NAME, 'Tamh1').screenshot("screenshot.png")
+                    driver.close()
+                    driver.quit()
+                    display.stop()
+                path = os.getcwd()
+                if os.path.exists(path + '/screenshot.png'):
+                    bot.send_photo(message.chat.id, open(path + '/screenshot.png', 'rb'), reply_markup=get_markup(message.chat.id))
+                    bot.delete_message(message.chat.id, msg.message_id)
+                    os.remove(path + '/screenshot.png')
+                else:
+                    bot.send_message(message.chat.id, 'Что-то пошло не так!', reply_markup=get_markup(message.chat.id))
 
 
 
@@ -297,11 +342,11 @@ def main():
     global bot
     while True:
         try:
-            bot.polling(none_stop=True, interval=0)
+            bot.infinity_polling()
         except:
             bot = telebot.TeleBot(token=token)
 
 def do():
-    bot.polling(interval=0, none_stop=True, long_polling_timeout=-1)
+    bot.infinity_polling()
 
-do()
+main()
