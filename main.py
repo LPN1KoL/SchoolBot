@@ -13,7 +13,7 @@ from platform import system
 from pyvirtualdisplay import Display
 from selenium.webdriver.chrome.options import Options
 
-token = '8073803344:AAH52GBbQPrIJzAo4W8fIWffK9MBv7m4j94'
+token = 'token'
 con = pymysql.connect(host='localhost', user='schoolnik', password='2987Kok_', database='school_bot')
 cur = con.cursor()
 cur.execute('create table IF NOT EXISTS users(id int primary key NOT NULL AUTO_INCREMENT, login varchar(100), password varchar(30), chat_id bigint, dn_id bigint, raspisanie varchar(100));')
@@ -35,9 +35,7 @@ def check(chat_id):
 
 def rep_kav(text):
     if text:
-        k = "\""
-        s = "\'"
-        return text.replace(k, '').replace(s, '')
+        return text.replace("\'", '').replace("\"", '')
     else:
         return ''
 
@@ -219,6 +217,11 @@ def raspisanie(message):
             markup.add(telebot.types.KeyboardButton("Отмена🔙"))
             bot.send_message(message.chat.id, "Для добавления расписания отправьте ссылку", reply_markup=markup)
             bot.register_next_step_handler(message, add_rasp)
+
+
+@bot.message_handler(commands=['help'])
+def help(message):
+    bot.send_message(message.chat.id, '*Команды:*\n\n/login - вход в дневник.ру\n\n/raspisanie - добавление ссылки на расписание\n\n/logout - выход из аккаунта дневник.ру\n\n/start_marks_search - начать поиск оценок\n\n/stop_marks_search - остановить поиск оценок')
 
 
 def send_files(dn, chat_id):
